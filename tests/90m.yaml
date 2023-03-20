@@ -1,0 +1,23 @@
+max_seq_len: 2048
+global_seed: 17
+
+# Run Name
+run_name: # If left blank, will be read from env var $COMPOSER_RUN_NAME
+
+# Model
+model:
+  name: mosaic_gpt
+  init_device: meta
+  tokenizer_name: ${tokenizer_name}
+  d_model: 512
+  n_heads: 16
+  n_layers: 1
+  mlp_ratio: 4
+  max_seq_len: ${max_seq_len}
+  vocab_size: 100277
+  init_std: 0.02
+  attn_pdrop: 0.0
+  resid_pdrop: 0.0
+  emb_pdrop: 0.0
+  attn_impl: flash
+  attn_qk_ln: true

@@ -1,0 +1,1 @@
+from .mosaic_gpt import FlaxMosaicGPT
