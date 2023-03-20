@@ -33,6 +33,7 @@ dynamic = ["version", "dependencies"]
 
 [project.optional-dependencies]
 test = [
+    "mosaicml-examples[llm-cpu] @ git+https://github.com/mosaicml/examples.git",
     "black",
     "isort",
     "flake8",

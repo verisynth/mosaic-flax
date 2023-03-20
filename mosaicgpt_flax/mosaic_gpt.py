@@ -38,8 +38,8 @@ class FlaxAttention(nn.Module):
         self.attn_clip_qkv = self.cfg.get('attn_clip_qkv', False)
         self.no_bias = self.cfg.get('no_bias', True)
 
-        self.W_qkv = nn.Dense(3 * self.d_model,
-                              use_bias=not self.no_bias)
+        self.Wqkv = nn.Dense(3 * self.d_model,
+                             use_bias=not self.no_bias)
         if self.attn_qk_ln:
             self.q_ln = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
             self.k_ln = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
@@ -79,7 +79,7 @@ class FlaxAttention(nn.Module):
             -> tuple[jnp.ndarray, jnp.ndarray, Optional[jnp.ndarray]]:
         assert x.shape[-1] == self.d_model, \
             f"Input to Attention layer has different dimension than the hidden dimension. Got {x.shape[-1]}"
-        qkv = self.W_qkv(x)
+        qkv = self.Wqkv(x)
         if self.attn_clip_qkv:
             qkv = jnp.clip(qkv, a_min=-self.clip_qkv, a_max=self.clip_qkv)
 
@@ -168,7 +168,7 @@ class FlaxGPTBlock(nn.Module):
 
 class FlaxMosaicGPT(nn.Module):
     cfg: DictConfig = None
-    vocab_size: int = 10027
+    vocab_size: int = 100277
 
     def setup(self) -> None:
         assert self.cfg.name == 'mosaic_gpt', f'Tried to build MosaicGPT model with cfg.name={self.cfg.name}'
@@ -229,7 +229,7 @@ class FlaxMosaicGPT(nn.Module):
                 f'Cannot forward input with past sequence length {past_position} and current sequence length '
                 f'{current_seq_len + 1}, this model only supports total sequence length <= {self.max_seq_len}.'
             )
-        pos = jnp.arange(past_position, current_seq_len + past_position, dtype=jnp.int64)[None, :]
+        pos = jnp.arange(past_position, current_seq_len + past_position, dtype=jnp.int32)[None, :]
         pos_emb = self.wpe(pos)
         x = tok_emb + pos_emb
         x = self.emb_drop(x, deterministic=not training)  # type: ignore

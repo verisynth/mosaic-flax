@@ -7,7 +7,7 @@ run_name: # If left blank, will be read from env var $COMPOSER_RUN_NAME
 # Model
 model:
   name: mosaic_gpt
-  init_device: meta
+  init_device: cpu
   tokenizer_name: ${tokenizer_name}
   d_model: 512
   n_heads: 16
@@ -21,3 +21,4 @@ model:
   emb_pdrop: 0.0
   attn_impl: flash
   attn_qk_ln: true
+  no_bias: false
