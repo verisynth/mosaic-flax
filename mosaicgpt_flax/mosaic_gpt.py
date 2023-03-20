@@ -180,6 +180,7 @@ class FlaxMosaicGPT(nn.Module):
         self.n_layers = self.cfg.n_layers
         self.attn_qk_ln = self.cfg.get('attn_qk_ln', True)
         self.attn_clip_qkv = self.cfg.get('attn_clip_qkv', False)
+        self.weight_tied = self.cfg.get('weight_tied', True)
 
         # todo: slightly skeptical about whether this is necessary. Leaving it alone for now
         self.embedding_fraction = self.cfg.get('embedding_fraction', 1)
@@ -195,6 +196,9 @@ class FlaxMosaicGPT(nn.Module):
         self.blocks = [FlaxGPTBlock(self.cfg) for _ in range(self.n_layers)]
 
         self.ln_f = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
+
+        if not self.weight_tied:
+            self.out = nn.Dense(self.vocab_size, use_bias=not self.no_bias)
 
     def __call__(self,
                 input_ids: jnp.ndarray,
@@ -241,7 +245,10 @@ class FlaxMosaicGPT(nn.Module):
         x = self.ln_f(x)  # type: ignore
         # output embedding weight tied to input embedding
 
-        logits = lax.dot_general(x, self.wte.embedding, (((len(x.shape) - 1,), (1,)), ((), ())))
+        if self.weight_tied:
+            logits = lax.dot_general(x, self.wte.embedding, (((len(x.shape) - 1,), (1,)), ((), ())))
+        else:
+            logits = self.out(x)
         if use_cache:
             return logits, present_key_values
         else:
