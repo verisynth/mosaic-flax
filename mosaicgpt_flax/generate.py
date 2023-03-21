@@ -48,8 +48,8 @@ def generate(param, model, prompt: str, max_len: int = 100, top_k: int = 0, top_
         if past_key_values is None:
             tok = current_state
         else:
-            tok = [current_state[0][-1]]
-        outputs, past_key_values = model.apply(param, tok,
+            tok = [current_state[0][-1:]]
+        outputs, past_key_values = model.apply(param, jnp.array(tok),
                                                past_key_values=past_key_values, use_cache=True)
 
         logits = outputs[-1][-1] * 1. / temp

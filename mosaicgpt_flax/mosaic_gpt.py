@@ -93,8 +93,8 @@ class FlaxAttention(nn.Module):
         if layer_past is not None:
             assert len(layer_past) == 2, 'layer_past should be a tuple of (k, v)'
             past_key, past_value = layer_past
-            k = jnp.concatenate((past_key, k), dim=1)
-            v = jnp.concatenate((past_value, v), dim=1)
+            k = jnp.concatenate((past_key, k), axis=1)
+            v = jnp.concatenate((past_value, v), axis=1)
 
         if use_cache is True:
             present = (k, v)
