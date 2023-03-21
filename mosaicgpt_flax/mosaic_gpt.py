@@ -41,8 +41,8 @@ class FlaxAttention(nn.Module):
         self.Wqkv = nn.Dense(3 * self.d_model,
                              use_bias=not self.no_bias)
         if self.attn_qk_ln:
-            self.q_ln = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
-            self.k_ln = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
+            self.q_ln = nn.LayerNorm(use_bias=not self.no_bias)
+            self.k_ln = nn.LayerNorm(use_bias=not self.no_bias)
 
         self.out_proj = nn.Dense(self.d_model,
                                  use_bias=not self.no_bias)
@@ -69,8 +69,7 @@ class FlaxAttention(nn.Module):
 
         if self.causal:
             causal_mask = self._get_causal_mask(query.shape[-3], key.shape[-3])
-            attn_weights = jnp.where(causal_mask[None, None, :, :], attn_weights, float('-inf'))
-
+            attn_weights = jnp.where(~causal_mask, attn_weights, float('-inf'))
         attn_weights = jax.nn.softmax(attn_weights, axis=-1)
         attn_output = jnp.einsum('...hst,...thd->...shd', attn_weights, value)
         return attn_output, attn_weights
@@ -79,6 +78,7 @@ class FlaxAttention(nn.Module):
             -> tuple[jnp.ndarray, jnp.ndarray, Optional[jnp.ndarray]]:
         assert x.shape[-1] == self.d_model, \
             f"Input to Attention layer has different dimension than the hidden dimension. Got {x.shape[-1]}"
+
         qkv = self.Wqkv(x)
         if self.attn_clip_qkv:
             qkv = jnp.clip(qkv, a_min=-self.clip_qkv, a_max=self.clip_qkv)
@@ -93,9 +93,7 @@ class FlaxAttention(nn.Module):
 
         n_heads = self.n_heads
         head_dim = self.d_model // self.n_heads
-        q, k, v = q.reshape(q.shape[:-1] + (n_heads, head_dim)), \
-                  k.reshape(k.shape[:-1] + (n_heads, head_dim)), \
-                  v.reshape(v.shape[:-1] + (n_heads, head_dim))
+        q, k, v = [x.reshape(x.shape[:-1] + (n_heads, head_dim)) for x in [q, k, v]]
 
         if layer_past is not None:
             assert len(layer_past) == 2, 'layer_past should be a tuple of (k, v)'
@@ -147,9 +145,9 @@ class FlaxGPTBlock(nn.Module):
         self.resid_pdrop = self.cfg.get('resid_pdrop', 0.0)
         self.no_bias = self.cfg.get('no_bias', True)
 
-        self.ln_1 = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
+        self.ln_1 = nn.LayerNorm(use_bias=not self.no_bias)
         self.causal_attn = FlaxAttention(cfg=self.cfg)
-        self.ln_2 = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
+        self.ln_2 = nn.LayerNorm(use_bias=not self.no_bias)
         self.mlp = FlaxGPTMLP(cfg=self.cfg)
         self.resid_attn_dropout = nn.Dropout(self.resid_pdrop)
         self.resid_mlp_dropout = nn.Dropout(self.resid_pdrop)
@@ -195,7 +193,7 @@ class FlaxMosaicGPT(nn.Module):
 
         self.blocks = [FlaxGPTBlock(self.cfg) for _ in range(self.n_layers)]
 
-        self.ln_f = nn.LayerNorm(self.d_model, use_bias=not self.no_bias)
+        self.ln_f = nn.LayerNorm(use_bias=not self.no_bias)
 
         if not self.weight_tied:
             self.out = nn.Dense(self.vocab_size, use_bias=not self.no_bias)

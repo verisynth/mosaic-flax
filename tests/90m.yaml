@@ -22,3 +22,4 @@ model:
   attn_impl: flash
   attn_qk_ln: true
   no_bias: false
+  inference: true
