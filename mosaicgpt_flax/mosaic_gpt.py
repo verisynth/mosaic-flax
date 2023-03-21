@@ -1,9 +1,9 @@
-from typing import Optional, Union
+from typing import Optional
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from jax import lax
 
@@ -160,12 +160,10 @@ class FlaxGPTBlock(nn.Module):
 
 
 class FlaxMosaicGPT(nn.Module):
-    cfg: Union[DictConfig, str] = None
+    cfg: DictConfig = None
     vocab_size: int = 100277
 
     def setup(self) -> None:
-        if isinstance(self.cfg, str):
-            self.cfg = OmegaConf.load(self.cfg)
         assert self.cfg.name == 'mosaic_gpt', f'Tried to build MosaicGPT model with cfg.name={self.cfg.name}'
 
         self.max_seq_len = self.cfg.max_seq_len
@@ -201,6 +199,8 @@ class FlaxMosaicGPT(nn.Module):
         Note on kv cache: if use_cache is True, it will return a tuple: logits, present_key_values
             otherwise, it will return logits only.
         """
+        if isinstance(input_ids, list):
+            input_ids = jnp.array(input_ids)
         assert len(input_ids.shape) in [2, 3], f"input_ids dimension must be 2. Got {len(input_ids.shape)}."
         batch_size, current_seq_len = input_ids.shape
 
