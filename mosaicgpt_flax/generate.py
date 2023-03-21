@@ -1,3 +1,5 @@
+import functools
+
 from .mosaic_gpt import FlaxMosaicGPT
 from .utils import read_torch_checkpoint
 import jax
@@ -7,6 +9,7 @@ import tiktoken
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
 
+@jax.jit
 def top_k_top_p_filtering(logits: jnp.ndarray,
                           top_k: int = 0,
                           top_p: float = 0.0,
@@ -22,8 +25,8 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
     top_k = min(top_k, logits.shape[-1])  # Safety check
     if top_k > 0:
         # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = jax.lax.top_k(logits, top_k)[1]
-        logits = logits.at[indices_to_remove].set(filter_value)
+        indices_to_keep = jax.lax.top_k(logits, top_k)[1]
+        logits = jnp.where(jnp.isin(jnp.arange(logits.shape[-1]), indices_to_keep), logits, filter_value)
 
     if top_p > 0.0:
         sorted_indices = jnp.argsort(-logits)
@@ -38,7 +41,11 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
     return logits
 
 
-def generate(param, model, prompt: str, max_len: int = 100, top_k: int = 0, top_p: float = 0.0, temp: float = 1.0):
+def get_eval_fn(model):
+    return jax.jit(functools.partial(model.apply))
+
+
+def generate(params, eval_fn, prompt: str, max_len: int = 100, top_k: int = 0, top_p: float = 0.0, temp: float = 1.0):
     tokens = tokenizer.encode_batch([prompt], allowed_special="all", disallowed_special=())
     current_state = tokens
     past_key_values = None
@@ -49,8 +56,8 @@ def generate(param, model, prompt: str, max_len: int = 100, top_k: int = 0, top_
             tok = current_state
         else:
             tok = [current_state[0][-1:]]
-        outputs, past_key_values = model.apply(param, jnp.array(tok),
-                                               past_key_values=past_key_values, use_cache=True)
+        outputs, past_key_values = eval_fn(params, jnp.array(tok),
+                                           past_key_values=past_key_values, use_cache=True)
 
         logits = outputs[-1][-1] * 1. / temp
         logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)

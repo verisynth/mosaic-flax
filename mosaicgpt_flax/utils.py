@@ -41,15 +41,14 @@ def map_layer_name(key):
 
 def convert_weights(key, splits, new_state_dict, state_dict):
     if splits[0].startswith('blocks'):
-        if splits[2].endswith('attn'):
+        if splits[2].endswith('attn') or splits[2] == 'mlp':
+            # attn, causal_attn, and mlp have other layers inside like attn.W_qkv.weight
+            layer_name = 'mlp' if splits[2] == 'mlp' else 'causal_attn'
             name = map_name(splits[3], splits[4])
-            add_item(new_state_dict, [splits[0] + '_' + splits[1], 'causal_attn', map_layer_name(splits[3]), name],
-                     convert_data(state_dict[key]))
-        elif splits[2] == 'mlp':
-            name = map_name(splits[3], splits[4])
-            add_item(new_state_dict, [splits[0] + '_' + splits[1], 'mlp', splits[3], name],
+            add_item(new_state_dict, [splits[0] + '_' + splits[1], layer_name, map_layer_name(splits[3]), name],
                      convert_data(state_dict[key]))
         else:
+            # others
             name = map_name(splits[2], splits[3])
             add_item(new_state_dict, [splits[0] + '_' + splits[1], splits[2], name],
                      convert_data(state_dict[key]))
