@@ -1,9 +1,9 @@
-from typing import Optional
+from typing import Optional, Union
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from jax import lax
 
@@ -160,10 +160,12 @@ class FlaxGPTBlock(nn.Module):
 
 
 class FlaxMosaicGPT(nn.Module):
-    cfg: DictConfig = None
+    cfg: Union[DictConfig, str] = None
     vocab_size: int = 100277
 
     def setup(self) -> None:
+        if isinstance(self.cfg, str):
+            self.cfg = OmegaConf.load(self.cfg)
         assert self.cfg.name == 'mosaic_gpt', f'Tried to build MosaicGPT model with cfg.name={self.cfg.name}'
 
         self.max_seq_len = self.cfg.max_seq_len
@@ -174,20 +176,17 @@ class FlaxMosaicGPT(nn.Module):
         self.attn_qk_ln = self.cfg.get('attn_qk_ln', True)
         self.attn_clip_qkv = self.cfg.get('attn_clip_qkv', False)
         self.weight_tied = self.cfg.get('weight_tied', True)
-
         # todo: slightly skeptical about whether this is necessary. Leaving it alone for now
         self.embedding_fraction = self.cfg.get('embedding_fraction', 1)
-
         self.no_bias = self.cfg.get('no_bias', True)
 
+        # Layers
         self.wte = nn.Embed(self.vocab_size,
                             self.d_model)
         self.wpe = nn.Embed(self.max_seq_len,
                             self.d_model)
         self.emb_drop = nn.Dropout(self.emb_pdrop)
-
         self.blocks = [FlaxGPTBlock(self.cfg) for _ in range(self.n_layers)]
-
         self.ln_f = nn.LayerNorm(use_bias=not self.no_bias)
 
         if not self.weight_tied:

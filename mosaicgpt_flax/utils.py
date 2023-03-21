@@ -63,8 +63,17 @@ def convert_weights(key, splits, new_state_dict, state_dict):
 def read_torch_checkpoint(path: str) -> flax.core.FrozenDict:
     state_dict = torch.load(path, map_location='cpu')['state']['model']
     new_state_dict = {}
+    offset = None
     for key in state_dict:
         splits = key.split('.')
-        convert_weights(key, splits[1:], new_state_dict, state_dict)
+        if offset is None:
+            if splits[0] == 'transformer':
+                offset = 1
+            elif splits[0] == 'model' and splits[1] == 'transformer':
+                offset = 2
+            else:
+                offset = 0
+        print(f"Converting the layer: {key} to {splits[offset:]}")
+        convert_weights(key, splits[offset:], new_state_dict, state_dict)
     params = flax.core.FrozenDict({'params': new_state_dict})
     return params
