@@ -70,7 +70,7 @@ class FlaxAttention(nn.Module):
         return attn_output, attn_weights
 
     def __call__(self, x, attn_mask=None, layer_past=None, use_cache=False, training=False)\
-            -> tuple[jnp.ndarray, jnp.ndarray, Optional[jnp.ndarray]]:
+            -> tuple[jnp.ndarray, jnp.ndarray, Optional[tuple]]:
         assert x.shape[-1] == self.d_model, \
             f"Input to Attention layer has different dimension than the hidden dimension. Got {x.shape[-1]}"
 
@@ -95,10 +95,7 @@ class FlaxAttention(nn.Module):
             k = jnp.concatenate((past_key, k), axis=1)
             v = jnp.concatenate((past_value, v), axis=1)
 
-        if use_cache is True:
-            present = (k, v)
-        else:
-            present = None
+        present = (k, v)
 
         context, attn_weights = self._attn_fn(q, k, v)
 
@@ -188,6 +185,8 @@ class FlaxMosaicGPT(nn.Module):
 
         if not self.weight_tied:
             self.out = nn.Dense(self.vocab_size, use_bias=not self.no_bias)
+        else:
+            self.out = lambda x: x
 
     def __call__(self,
                 input_ids: jnp.ndarray,
