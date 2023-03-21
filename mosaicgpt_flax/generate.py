@@ -22,7 +22,7 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
     """
     assert len(logits.shape) == 1  # batch size 1 for now - could be updated for more but the code would be less clear
-    top_k = min(top_k, logits.shape[-1])  # Safety check
+    top_k = jnp.minimum(top_k, logits.shape[-1])  # Safety check
     if top_k > 0:
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_keep = jax.lax.top_k(logits, top_k)[1]
@@ -41,11 +41,18 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
     return logits
 
 
-def get_eval_fn(model):
-    return jax.jit(functools.partial(model.apply))
-
-
 def generate(params, eval_fn, prompt: str, max_len: int = 100, top_k: int = 0, top_p: float = 0.0, temp: float = 1.0):
+    """
+    Args:
+        params: FrozenDict containing the model parameters
+        eval_fn: the evaluation function (usually the `model.apply` or `jax.jit(model.apply)`)
+        prompt: the prompt string
+        max_len: the max generation length
+        top_k: top k
+        top_p: top p
+        temp: temperature
+        the completed string (containing the prompt)
+    """
     tokens = tokenizer.encode_batch([prompt], allowed_special="all", disallowed_special=())
     current_state = tokens
     past_key_values = None

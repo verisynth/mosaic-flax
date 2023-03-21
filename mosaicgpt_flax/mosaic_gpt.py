@@ -82,9 +82,8 @@ class FlaxAttention(nn.Module):
 
         if self.attn_qk_ln:
             # Applying layernorm to qk
-            dtype = qkv.dtype
-            q = self.q_ln(q).astype(dtype)
-            k = self.k_ln(k).astype(dtype)
+            q = self.q_ln(q)
+            k = self.k_ln(k)
 
         n_heads = self.n_heads
         head_dim = self.d_model // self.n_heads
@@ -237,11 +236,8 @@ class FlaxMosaicGPT(nn.Module):
         x = self.ln_f(x)  # type: ignore
         # output embedding weight tied to input embedding
 
-        if self.weight_tied:
-            logits = lax.dot_general(x, self.wte.embedding, (((len(x.shape) - 1,), (1,)), ((), ())))
-        else:
-            logits = self.out(x)
-        if use_cache:
-            return logits, present_key_values
-        else:
-            return logits, None
+        logits = lax.cond(self.weight_tied,
+                          lambda x: lax.dot_general(x, self.wte.embedding, (((len(x.shape) - 1,), (1,)), ((), ()))),
+                          lambda x: self.out(x))(x)
+
+        return logits, present_key_values
