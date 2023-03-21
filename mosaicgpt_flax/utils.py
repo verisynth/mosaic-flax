@@ -65,6 +65,6 @@ def read_torch_checkpoint(path: str) -> flax.core.FrozenDict:
     new_state_dict = {}
     for key in state_dict:
         splits = key.split('.')
-        convert_weights(key, splits, new_state_dict, state_dict)
+        convert_weights(key, splits[1:], new_state_dict, state_dict)
     params = flax.core.FrozenDict({'params': new_state_dict})
     return params
