@@ -9,6 +9,26 @@ import tiktoken
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
 
+def top_k_filtering(logits, top_k=32, filter_value=-float('Inf')):
+    # Remove all tokens with a probability less than the last token of the top-k
+    indices_to_keep = jax.lax.top_k(logits, top_k)[1]
+    logits = jnp.where(jnp.isin(jnp.arange(logits.shape[-1]), indices_to_keep), logits, filter_value)
+    return logits
+
+
+def top_p_filtering(logits, top_p=0.9, filter_value=-float('Inf')):
+    sorted_indices = jnp.argsort(-logits)
+    sorted_logits = logits[sorted_indices]
+    cumulative_probs = jnp.cumsum(jax.nn.softmax(sorted_logits, axis=-1), axis=-1)
+
+    # Remove tokens with cumulative probability above the threshold
+    sorted_indices_to_remove = cumulative_probs[:-1] > top_p
+
+    indices_to_remove = sorted_indices[sorted_indices_to_remove + 1]
+    logits = logits.at[indices_to_remove].set(filter_value)
+    return logits
+
+
 @jax.jit
 def top_k_top_p_filtering(logits: jnp.ndarray,
                           top_k: int = 0,
@@ -23,21 +43,16 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
     """
     assert len(logits.shape) == 1  # batch size 1 for now - could be updated for more but the code would be less clear
     top_k = jnp.minimum(top_k, logits.shape[-1])  # Safety check
-    if top_k > 0:
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_keep = jax.lax.top_k(logits, top_k)[1]
-        logits = jnp.where(jnp.isin(jnp.arange(logits.shape[-1]), indices_to_keep), logits, filter_value)
 
-    if top_p > 0.0:
-        sorted_indices = jnp.argsort(-logits)
-        sorted_logits = logits[sorted_indices]
-        cumulative_probs = jnp.cumsum(jax.nn.softmax(sorted_logits, axis=-1), axis=-1)
+    logits = jax.lax.cond(top_k > 0,
+                          lambda x: top_k_filtering(x, top_k=top_k, filter_value=filter_value),
+                          lambda x: x,
+                          logits)
+    logits = jax.lax.cond(top_p > 0.0,
+                          lambda x: top_p_filtering(x, top_p=top_p, filter_value=filter_value),
+                          lambda x: x,
+                          logits)
 
-        # Remove tokens with cumulative probability above the threshold
-        sorted_indices_to_remove = cumulative_probs[:-1] > top_p
-
-        indices_to_remove = sorted_indices[sorted_indices_to_remove + 1]
-        logits = logits.at[indices_to_remove].set(filter_value)
     return logits
 
 
