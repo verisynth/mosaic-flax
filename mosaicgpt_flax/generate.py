@@ -42,7 +42,7 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
     """
     assert len(logits.shape) == 1  # batch size 1 for now - could be updated for more but the code would be less clear
-    top_k = jnp.minimum(top_k, logits.shape[-1])  # Safety check
+    assert top_k < logits.shape[-1], "top_k must be < vocab size"
 
     logits = jax.lax.cond(top_k > 0,
                           lambda x: top_k_filtering(x, top_k=top_k, filter_value=filter_value),
