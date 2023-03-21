@@ -61,7 +61,7 @@ def convert_weights(key, splits, new_state_dict, state_dict):
 
 
 def read_torch_checkpoint(path: str) -> flax.core.FrozenDict:
-    state_dict = torch.load(path, map_location='cpu')['model']
+    state_dict = torch.load(path, map_location='cpu')['state']['model']
     new_state_dict = {}
     for key in state_dict:
         splits = key.split('.')
