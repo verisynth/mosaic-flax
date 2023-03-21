@@ -238,6 +238,7 @@ class FlaxMosaicGPT(nn.Module):
 
         logits = lax.cond(self.weight_tied,
                           lambda x: lax.dot_general(x, self.wte.embedding, (((len(x.shape) - 1,), (1,)), ((), ()))),
-                          lambda x: self.out(x))(x)
+                          lambda x: self.out(x),
+                          x)
 
         return logits, present_key_values
