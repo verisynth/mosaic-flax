@@ -186,7 +186,8 @@ class FlaxMosaicGPT(nn.Module):
         if not self.weight_tied:
             self.out = nn.Dense(self.vocab_size, use_bias=not self.no_bias)
         else:
-            self.out = lambda x: x
+            # Dummy function to match the output spec of nn.Dense
+            self.out = lambda x: jnp.zeros(x.shape[:-1] + (self.vocab_size,))
 
     def __call__(self,
                 input_ids: jnp.ndarray,
