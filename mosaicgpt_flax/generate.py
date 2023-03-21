@@ -11,8 +11,11 @@ tokenizer = tiktoken.get_encoding("cl100k_base")
 
 def top_k_filtering(logits, top_k=32, filter_value=-float('Inf')):
     # Remove all tokens with a probability less than the last token of the top-k
-    indices_to_keep = jax.lax.top_k(logits, top_k)[1]
-    logits = jnp.where(jnp.isin(jnp.arange(logits.shape[-1]), indices_to_keep), logits, filter_value)
+    sorted_indices = jnp.argsort(-logits)
+    k_th_value = logits[sorted_indices[..., top_k - 1]]
+    indices_to_remove = logits < k_th_value[..., None]
+    logits = jnp.where(indices_to_remove, filter_value, logits)
+
     return logits
 
 
@@ -37,7 +40,7 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (vocabulary size)
-            top_k >0: keep only top k tokens with highest probability (top-k filtering).
+            top_k >0: keep only top k tokens with the highest probability (top-k filtering).
             top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
     """
