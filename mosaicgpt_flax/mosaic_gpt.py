@@ -69,7 +69,7 @@ class FlaxAttention(nn.Module):
         attn_output = jnp.einsum('...hst,...thd->...shd', attn_weights, value)
         return attn_output, attn_weights
 
-    def __call__(self, x, attn_mask=None, layer_past=None, use_cache=False, training=False)\
+    def __call__(self, x, attn_mask=None, layer_past=None, use_cache=False, cache_pos=-1, training=False)\
             -> tuple[jnp.ndarray, jnp.ndarray, Optional[tuple]]:
         assert x.shape[-1] == self.d_model, \
             f"Input to Attention layer has different dimension than the hidden dimension. Got {x.shape[-1]}"
@@ -92,8 +92,13 @@ class FlaxAttention(nn.Module):
         if layer_past is not None:
             assert len(layer_past) == 2, 'layer_past should be a tuple of (k, v)'
             past_key, past_value = layer_past
-            k = jnp.concatenate((past_key, k), axis=1)
-            v = jnp.concatenate((past_value, v), axis=1)
+            if cache_pos >= 0:
+                assert k.shape[1] == 1, 'currently only support key_len being 1'
+                k = past_key.at[:, cache_pos].set(k.squeeze(1))
+                v = past_value.at[:, cache_pos].set(v.squeeze(1))
+            else:
+                k = jnp.concatenate((past_key, k), axis=1)
+                v = jnp.concatenate((past_value, v), axis=1)
 
         present = (k, v)
 
@@ -190,14 +195,11 @@ class FlaxMosaicGPT(nn.Module):
             self.out = lambda x: jnp.zeros(x.shape[:-1] + (self.vocab_size,))
 
     def __call__(self,
-                input_ids: jnp.ndarray,
-                past_key_values: Optional[jnp.ndarray] = None,
-                use_cache: bool = False,
-                training: bool = False) -> tuple[jnp.ndarray, Optional[list[jnp.ndarray]]]:
-        """
-        Note on kv cache: if use_cache is True, it will return a tuple: logits, present_key_values
-            otherwise, it will return logits only.
-        """
+                 input_ids: jnp.ndarray,
+                 past_key_values: Optional[jnp.ndarray] = None,
+                 use_cache: bool = False,
+                 cache_pos: int = -1,
+                 training: bool = False) -> tuple[jnp.ndarray, Optional[list[jnp.ndarray]]]:
         if isinstance(input_ids, list):
             input_ids = jnp.array(input_ids)
         assert len(input_ids.shape) in [2, 3], f"input_ids dimension must be 2. Got {len(input_ids.shape)}."
@@ -211,7 +213,7 @@ class FlaxMosaicGPT(nn.Module):
                 f"length of past_key_values must match the number of layers. Got {len(past_key_values)}."
             # get the key tensor whose spec should be (batch, seq, n_head, head_dim), and
             # collect the `seq`, so that we shift the position embedding later.
-            past_position = past_key_values[0][0].shape[1]
+            past_position = past_key_values[0][0].shape[1] if cache_pos < 0 else cache_pos
 
         tok_emb = self.wte(input_ids)
 
@@ -230,7 +232,8 @@ class FlaxMosaicGPT(nn.Module):
 
         present_key_values = []
         for block, layer_past in zip(self.blocks, past_key_values):  # type: ignore
-            x, present = block(x, attn_mask, layer_past=layer_past, use_cache=use_cache, training=training)
+            x, present = block(x, attn_mask, layer_past=layer_past, use_cache=use_cache,
+                               cache_pos=cache_pos, training=training)
             present_key_values.append(present)
 
         x = self.ln_f(x)  # type: ignore

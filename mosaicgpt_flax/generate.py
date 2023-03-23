@@ -3,10 +3,14 @@ import functools
 from .mosaic_gpt import FlaxMosaicGPT
 from .utils import read_torch_checkpoint
 import jax
+from jax import lax
+from jax import random
 import jax.numpy as jnp
 import tiktoken
+from t5x.decoding import temperature_sample, beam_search
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
+EOS_ID = 100257
 
 
 def top_k_filtering(logits, top_k=32, filter_value=-float('Inf')):
@@ -58,12 +62,14 @@ def top_k_top_p_filtering(logits: jnp.ndarray,
     return logits
 
 
-def generate(params, eval_fn, prompt: str, max_len: int = 100, top_k: int = 0, top_p: float = 0.0, temp: float = 1.0):
+def generate(params, eval_fn, prompt: str, seed: int = 0,
+             max_len: int = 100, top_k: int = 0, top_p: float = 0.0, temp: float = 1.0):
     """
     Args:
         params: FrozenDict containing the model parameters
         eval_fn: the evaluation function (usually the `model.apply` or `jax.jit(model.apply)`)
         prompt: the prompt string
+        seed: random seed
         max_len: the max generation length
         top_k: top k
         top_p: top p
@@ -73,7 +79,7 @@ def generate(params, eval_fn, prompt: str, max_len: int = 100, top_k: int = 0, t
     tokens = tokenizer.encode_batch([prompt], allowed_special="all", disallowed_special=())
     current_state = tokens
     past_key_values = None
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.PRNGKey(seed)
     for _ in range(max_len):
         key, subkey = jax.random.split(rng)
         if past_key_values is None:
