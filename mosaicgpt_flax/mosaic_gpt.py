@@ -215,7 +215,7 @@ class FlaxMosaicGPT(nn.Module):
 
         tok_emb = self.wte(input_ids)
 
-        assert current_seq_len + past_position > self.max_seq_len, \
+        assert current_seq_len + past_position <= self.max_seq_len, \
             f'Cannot forward input with past sequence length {past_position} and current sequence length ' \
             f'{current_seq_len + 1}, this model only supports total sequence length <= {self.max_seq_len}.'
 
