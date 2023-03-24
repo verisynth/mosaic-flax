@@ -7,6 +7,7 @@ from omegaconf import DictConfig
 
 from jax import lax
 
+
 # TODO:
 #  1. attn_mask,
 #  2. different attn_impl
@@ -69,7 +70,7 @@ class FlaxAttention(nn.Module):
         attn_output = jnp.einsum('...hst,...thd->...shd', attn_weights, value)
         return attn_output, attn_weights
 
-    def __call__(self, x, attn_mask=None, layer_past=None, use_cache=False, training=False)\
+    def __call__(self, x, attn_mask=None, layer_past=None, use_cache=False, training=False) \
             -> tuple[jnp.ndarray, jnp.ndarray, Optional[tuple]]:
         assert x.shape[-1] == self.d_model, \
             f"Input to Attention layer has different dimension than the hidden dimension. Got {x.shape[-1]}"
@@ -214,11 +215,10 @@ class FlaxMosaicGPT(nn.Module):
 
         tok_emb = self.wte(input_ids)
 
-        if current_seq_len + past_position > self.max_seq_len:
-            raise ValueError(
-                f'Cannot forward input with past sequence length {past_position} and current sequence length '
-                f'{current_seq_len + 1}, this model only supports total sequence length <= {self.max_seq_len}.'
-            )
+        assert current_seq_len + past_position > self.max_seq_len, \
+            f'Cannot forward input with past sequence length {past_position} and current sequence length ' \
+            f'{current_seq_len + 1}, this model only supports total sequence length <= {self.max_seq_len}.'
+
         pos = jnp.arange(past_position, current_seq_len + past_position, dtype=jnp.int32)[None, :]
         pos_emb = self.wpe(pos)
         x = tok_emb + pos_emb
