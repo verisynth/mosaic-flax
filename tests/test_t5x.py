@@ -25,13 +25,27 @@ def test_t5x():
         cur_token = decoding_state.cur_token
         sequences = decoding_state.sequences
         cache = decoding_state.cache
-        res = eval_fn(params, sequences, past_key_values=None, use_cache=False)
+        res = eval_fn(params, cur_token, past_key_values=cache, use_cache=True)
         # new_state = DecodingState()
         return res[0][:, -1], {}
 
     # init_cache = [(jnp.zeros((1, 2, 20, 128)), jnp.zeros((1, 2, 20, 128))) for _ in range(32)]
-    print(tokens)
-    print(temperature_sample(tokens, {}, tokens_to_logits, 100277))
+    def preprocess_tokens(tokens, pad_to: int = 10):
+        assert pad_to >= tokens.shape[1]
+        return jnp.concatenate(
+            (jnp.zeros((tokens.shape[0], 1)),
+             tokens,
+             jnp.zeros((tokens.shape[0], pad_to - tokens.shape[1]))
+             ), axis=1).astype(int)
+
+    init_cache = [
+        tuple([jnp.zeros((tokens.shape[0], 10, model.n_heads, model.d_model // model.n_heads)) for _ in range(2)])
+        for _ in range(model.n_layers)]
+
+    print(preprocess_tokens(tokens, pad_to=10))
+    print(temperature_sample(preprocess_tokens(tokens, pad_to=10), init_cache, tokens_to_logits, 100277,
+                             initial_index=jnp.ones((tokens.shape[0],), dtype=jnp.int32)))
+
 
 
 if __name__ == '__main__':
