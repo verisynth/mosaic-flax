@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from omegaconf import DictConfig
 
 from jax import lax
+import chex
 
 
 # TODO:
@@ -63,10 +64,12 @@ class FlaxAttention(nn.Module):
         """
         attn_weights = jnp.einsum('...shd,...thd->...hst', query / jnp.sqrt(query.shape[-1]), key)
 
-        if self.causal:
-            causal_mask = self._get_causal_mask(query.shape[-3], key.shape[-3])
-            attn_weights = jnp.where(~causal_mask, attn_weights, float('-inf'))
-        attn_weights = jax.nn.softmax(attn_weights, axis=-1)
+        attn_weights = jnp.where(self.causal,
+                                 jnp.where(~self._get_causal_mask(query.shape[-3], key.shape[-3]),
+                                           attn_weights,
+                                           float('-inf')),
+                                 attn_weights)
+
         attn_output = jnp.einsum('...hst,...thd->...shd', attn_weights, value)
         return attn_output, attn_weights
 
@@ -200,9 +203,11 @@ class FlaxMosaicGPT(nn.Module):
                  training: bool = False) -> tuple[jnp.ndarray, Optional[list[jnp.ndarray]]]:
         if isinstance(input_ids, list):
             input_ids = jnp.array(input_ids)
-        assert len(input_ids.shape) in [2, 3], f"input_ids dimension must be 2. Got {len(input_ids.shape)}."
+        chex.assert_rank(input_ids, 2,
+                         custom_message=f"input_ids dimension must be 2. Got {len(input_ids.shape)}.")
         batch_size, current_seq_len = input_ids.shape
 
+        # past_key_values is supposed to be list(tuple(Array, Array))
         if past_key_values is None:
             past_key_values = [None] * self.n_layers
             past_position = 0
@@ -215,11 +220,7 @@ class FlaxMosaicGPT(nn.Module):
 
         tok_emb = self.wte(input_ids)
 
-        assert current_seq_len + past_position <= self.max_seq_len, \
-            f'Cannot forward input with past sequence length {past_position} and current sequence length ' \
-            f'{current_seq_len + 1}, this model only supports total sequence length <= {self.max_seq_len}.'
-
-        pos = jnp.arange(past_position, current_seq_len + past_position, dtype=jnp.int32)[None, :]
+        pos = jnp.arange(0, current_seq_len, dtype=jnp.int32)[None, :] + past_position
         pos_emb = self.wpe(pos)
         x = tok_emb + pos_emb
         x = self.emb_drop(x, deterministic=not training)  # type: ignore

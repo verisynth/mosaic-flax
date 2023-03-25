@@ -21,7 +21,6 @@ def test_t5x():
 
     def tokens_to_logits(decoding_state):
         cur_index = decoding_state.cur_index
-        print(decoding_state)
         cur_token = decoding_state.cur_token
         sequences = decoding_state.sequences
         cache = decoding_state.cache
