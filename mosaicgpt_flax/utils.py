@@ -1,5 +1,7 @@
 import flax
 import torch
+from t5x.decoding import temperature_sample
+
 from mosaicgpt_flax import FlaxMosaicGPT
 
 import jax
@@ -60,6 +62,13 @@ def convert_weights(key, splits, new_state_dict, state_dict, dtype=jnp.float32):
 
 
 def read_torch_checkpoint(path: str, dtype=jnp.float32) -> flax.core.FrozenDict:
+    """
+    Read pytorch checkpoint and convert it to flax FrozenDict.
+    The checkpoint file is loaded by torch.load and the state dict is nested under 'state'->'model' keys.
+    :param path: checkpoint path
+    :param dtype: the dtype of the parameters
+    :return: a FrozenDict containing parameters
+    """
     state_dict = torch.load(path, map_location='cpu')['state']['model']
     new_state_dict = {}
     offset = None
@@ -85,14 +94,14 @@ def tokens_to_logits_fn_factory(params, model):
     :param model: the flax model (containing a jitt-able `apply` method)
     :return: the `tokens_to_logits` function
     """
-    eval_fn = jax.jit(model.apply)
+    eval_fn = model.apply
 
     def tokens_to_logits(decoding_state):
         cur_index = decoding_state.cur_index
         cur_token = decoding_state.cur_token
         cache = decoding_state.cache
         res = eval_fn(params, cur_token, past_key_values=cache, past_position=cur_index[0], use_cache=True)
-        return res[0][:, -1], [(x[0][:, 1:], x[1][:, 1:]) for x in res[1]]
+        return res[0][..., -1, :], [(x[0][..., 1:, :, :], x[1][..., 1:, :, :]) for x in res[1]]
 
     return tokens_to_logits
 
@@ -115,3 +124,36 @@ def preprocess_tokens(tokens, pad_to: int = 10):
     return jnp.concatenate((jnp.zeros((tokens.shape[0], 1)),
                             tokens,
                             jnp.zeros((tokens.shape[0], pad_to - tokens.shape[1]))), axis=1).astype(int)
+
+
+def generate_factory(model, eos_id=100277, temperature=0.9, topk=128, topp=0.9):
+    """
+    The factory function for `generate` function. This wraps around the T5X `temperature_sample` function to provide
+    a jit-compilable version of generation function.
+    :param model: the flax model (containing a jitt-able `apply` method)
+    :param eos_id: the id of the end-of-sequence token
+    :param temperature: the temperature
+    :param topk: top k
+    :param topp: top p
+    :return: a jit-compilable generation function
+      args: params, tokens, cache
+        params: the pytree object of model parameters
+        rng: the rng key(s)
+        tokens: the 0-padded input tokens (e.g., [[0, 1, 2, 3, 0, 0]], 0's at the end will be filled in for generation)
+          One may call `preprocess_tokens` to prepare the tokens for generation.
+        cache: the 0-padded kv cache for generation. The signature is list[tuple[jnp.ndarray, jnp.ndarray]].
+          length of list = num_layers, shape of each jnp.ndarray = (batch_size, max_seq_len, num_head, head_dim)
+    """
+    if topk != 0:  # prefer top-k sampling
+        topp = 0
+
+    def generate(params, rng, tokens, cache):
+        tokens_to_logits = tokens_to_logits_fn_factory(params, model)
+
+        return temperature_sample(tokens, cache, eos_id=eos_id,
+                                  tokens_to_logits=tokens_to_logits,
+                                  decode_rng=rng,
+                                  temperature=temperature,
+                                  topk=topk,
+                                  topp=topp)
+    return generate
