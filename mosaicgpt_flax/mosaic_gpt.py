@@ -69,7 +69,7 @@ class FlaxAttention(nn.Module):
                                            attn_weights,
                                            float('-inf')),
                                  attn_weights)
-
+        attn_weights = jax.nn.softmax(attn_weights, axis=-1)
         attn_output = jnp.einsum('...hst,...thd->...shd', attn_weights, value)
         return attn_output, attn_weights
 
