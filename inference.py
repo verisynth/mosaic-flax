@@ -30,6 +30,8 @@ def main(argv):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     n_heads, d_model, n_layers = cfg.model.n_heads, cfg.model.d_model, cfg.model.n_layers
 
+    compiled = {}  # cache the jit-compiled functions
+
     def inference(prefix: str = "", max_len: int = 16, temp=0.35, top_k=64, top_p=0.95, rng=0):
         tokens = jnp.array(tokenizer.encode_batch([prefix], allowed_special="all", disallowed_special=()))
         max_len = max(int(max_len + tokens.shape[1]), 1 + tokens.shape[1])
@@ -39,7 +41,11 @@ def main(argv):
             for _ in range(n_layers)]
         tokens = preprocess_tokens(tokens, max_len)
 
-        generate = jax.pmap(generate_factory(model, eos_id=100277, temperature=temp, topk=top_k, topp=top_p))
+        if (temp, top_k, top_p) not in compiled:
+            compiled[(temp, top_k, top_p)] = jax.pmap(generate_factory(model,
+                                                                       eos_id=100277, temperature=temp,
+                                                                       topk=top_k, topp=top_p))
+        generate = compiled[(temp, top_k, top_p)]
 
         if rng == 0:
             rng = np.random.randint(0, 2 ** 32 - 1, dtype=np.uint32)
