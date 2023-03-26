@@ -72,7 +72,8 @@ class FlaxAttention(nn.Module):
                                            float('-inf')),
                                  attn_weights)
         mask = jnp.arange(0, key_len, dtype=jnp.int32) < (key_len - past_position - query_len)
-        attn_weights = attn_weights - float('inf') * mask.reshape((1, 1, 1, -1))
+        mask_shape = (1,) * (attn_weights.ndim - 1) + (-1,)
+        attn_weights = jnp.where(mask.reshape(mask_shape), float('-inf'), attn_weights)
         attn_weights = jax.nn.softmax(attn_weights, axis=-1)
         attn_output = jnp.einsum('...hst,...thd->...shd', attn_weights, value)
         return attn_output, attn_weights
