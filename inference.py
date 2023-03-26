@@ -15,14 +15,15 @@ from absl import app, flags
 import gradio as gr
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('cfg_path', 'mosaic-flax/tests/3b.yaml', 'Path to config file', short_name='c')
+flags.DEFINE_string('cfg_path', 'tests/3b.yaml', 'Path to config file', short_name='c')
+flags.DEFINE_string('model_path', 'ckpt.pt', 'Path to checkpoint file', short_name='m')
 
 
-def main():
+def main(argv):
 
     cfg = OmegaConf.load(FLAGS.cfg_path)
 
-    params = read_torch_checkpoint('ckpt.pt', dtype=jnp.bfloat16)
+    params = read_torch_checkpoint(FLAGS.model_path, dtype=jnp.bfloat16)
     params = jax.tree_util.tree_map(lambda x: jax.device_put_replicated(x, jax.devices()), params)
 
     model = FlaxMosaicGPT(cfg=cfg.model)
@@ -36,9 +37,12 @@ def main():
         init_cache = [
             tuple([jnp.zeros((tokens.shape[0], max_len, n_heads, d_model // n_heads)) for _ in range(2)])
             for _ in range(n_layers)]
+        tokens = preprocess_tokens(tokens, max_len)
 
         generate = jax.pmap(generate_factory(model, eos_id=100277, temperature=temp, topk=top_k, topp=top_p))
 
+        if rng == 0:
+            rng = np.random.randint(0, 2 ** 32 - 1, dtype=np.uint32)
         rng = jax.random.PRNGKey(rng)
         rngs, tokens, init_cache = populate_inputs(rng, tokens, init_cache)
 
@@ -50,6 +54,7 @@ def main():
         inference,
         [
             "textbox",
+            "number",
             "number",
             "number",
             "number",
