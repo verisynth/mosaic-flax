@@ -156,4 +156,21 @@ def generate_factory(model, eos_id=100277, temperature=0.9, topk=128, topp=0.9):
                                   temperature=temperature,
                                   topk=topk,
                                   topp=topp)
+
     return generate
+
+
+def populate_inputs(rng, tokens, cache):
+    """
+    A helper function only for data-parallel generation. It populates the inputs across all recognized devices.
+    `tokens` and `cache` will be replicated across devices.
+    (for model parameters, it is recommended to replicate separately to avoid TPU OOM)
+    :param rng: the initial rnk key
+    :param tokens: the input tokens
+    :param cache: the kv cache
+    :return: (rngs, tokens, caches) populated across all jax devices
+    """
+    rngs = jax.device_put_sharded(tuple(jax.random.split(rng, 8)), jax.devices())
+    tokens = jax.device_put_replicated(tokens, jax.devices())
+    caches = [tuple([jax.device_put_replicated(x, jax.devices()) for x in xs]) for xs in cache]
+    return rngs, tokens, caches

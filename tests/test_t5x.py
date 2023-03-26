@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import tiktoken
 
 from mosaicgpt_flax import FlaxMosaicGPT
-from mosaicgpt_flax.utils import tokens_to_logits_fn_factory, preprocess_tokens, generate_factory
+from mosaicgpt_flax.utils import preprocess_tokens, generate_factory
 
 
 def test_t5x():
