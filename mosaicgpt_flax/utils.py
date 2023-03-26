@@ -26,11 +26,11 @@ def map_name(key_1, key_2):
         return 'kernel'  # weight->kernel for dense layers
 
 
-def convert_data(state: torch.tensor, embedding=False) -> jnp.ndarray:
+def convert_data(state: torch.tensor, embedding=False, dtype=jnp.float32) -> jnp.ndarray:
     if len(state.shape) == 1 or embedding:
-        return jnp.array(state.numpy())
+        return jnp.array(state.numpy(), dtype=dtype)
     elif len(state.shape) == 2 and not embedding:
-        return jnp.array(state.numpy()).T
+        return jnp.array(state.numpy(), dtype=dtype).T
     else:
         raise ValueError("unrecognized shape: ", state.shape)
 
@@ -39,27 +39,27 @@ def map_layer_name(key):
     return key.replace('W_qkv', 'Wqkv')
 
 
-def convert_weights(key, splits, new_state_dict, state_dict):
+def convert_weights(key, splits, new_state_dict, state_dict, dtype=jnp.float32):
     if splits[0].startswith('blocks'):
         if splits[2].endswith('attn') or splits[2] == 'mlp':
             # attn, causal_attn, and mlp have other layers inside like attn.W_qkv.weight
             layer_name = 'mlp' if splits[2] == 'mlp' else 'causal_attn'
             name = map_name(splits[3], splits[4])
             add_item(new_state_dict, [splits[0] + '_' + splits[1], layer_name, map_layer_name(splits[3]), name],
-                     convert_data(state_dict[key]))
+                     convert_data(state_dict[key], dtype=dtype))
         else:
             # others
             name = map_name(splits[2], splits[3])
             add_item(new_state_dict, [splits[0] + '_' + splits[1], splits[2], name],
-                     convert_data(state_dict[key]))
+                     convert_data(state_dict[key], dtype=dtype))
     elif splits[0] in ['wte', 'wpe']:
         add_item(new_state_dict, [splits[0], 'embedding'], convert_data(state_dict[key], embedding=True))
     else:
         name = map_name(splits[0], splits[1])
-        add_item(new_state_dict, [map_layer_name(splits[0]), name], convert_data(state_dict[key]))
+        add_item(new_state_dict, [map_layer_name(splits[0]), name], convert_data(state_dict[key], dtype=dtype))
 
 
-def read_torch_checkpoint(path: str) -> flax.core.FrozenDict:
+def read_torch_checkpoint(path: str, dtype=jnp.float32) -> flax.core.FrozenDict:
     state_dict = torch.load(path, map_location='cpu')['state']['model']
     new_state_dict = {}
     offset = None
@@ -73,6 +73,45 @@ def read_torch_checkpoint(path: str) -> flax.core.FrozenDict:
             else:
                 offset = 0
         print(f"Converting the layer: {key} to {splits[offset:]}")
-        convert_weights(key, splits[offset:], new_state_dict, state_dict)
+        convert_weights(key, splits[offset:], new_state_dict, state_dict, dtype=dtype)
     params = flax.core.FrozenDict({'params': new_state_dict})
     return params
+
+
+def tokens_to_logits_fn_factory(params, model):
+    """
+    The factory function for `tokens_to_logits` function. This fits into the T5X library decoding spec.
+    :param params: the pytree object of model parameters
+    :param model: the flax model (containing a jitt-able `apply` method)
+    :return: the `tokens_to_logits` function
+    """
+    eval_fn = jax.jit(model.apply)
+
+    def tokens_to_logits(decoding_state):
+        cur_index = decoding_state.cur_index
+        cur_token = decoding_state.cur_token
+        cache = decoding_state.cache
+        res = eval_fn(params, cur_token, past_key_values=cache, past_position=cur_index[0], use_cache=True)
+        return res[0][:, -1], [(x[0][:, 1:], x[1][:, 1:]) for x in res[1]]
+
+    return tokens_to_logits
+
+
+def preprocess_tokens(tokens, pad_to: int = 10):
+    """
+    Preprocess the tokens for the generation task.
+    Given input tokens, it will be padded by 0 with length 1 in the beginning, and padded by 0
+      with length `pad_to - tokens.shape[1]` in the end. Overall, the length of the output tokens
+      will be `pad_to + 1`.
+    This prepares the tokens for generation tasks to generate sequences of length `pad_to`.
+    :param tokens: the input tokens
+    :param pad_to: the number of padding to be added in the end
+    :return: the padded tokens
+      For example,
+        tokens = [[1, 2, 3], [4, 5, 6]], pad_to = 5
+        return = [[0, 1, 2, 3, 0, 0], [0, 4, 5, 6, 0, 0]]
+    """
+    assert pad_to >= tokens.shape[1]
+    return jnp.concatenate((jnp.zeros((tokens.shape[0], 1)),
+                            tokens,
+                            jnp.zeros((tokens.shape[0], pad_to - tokens.shape[1]))), axis=1).astype(int)

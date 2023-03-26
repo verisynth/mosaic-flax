@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import tiktoken
 
 from mosaicgpt_flax import FlaxMosaicGPT
+from mosaicgpt_flax.utils import tokens_to_logits_fn_factory, preprocess_tokens
 
 
 def test_t5x():
@@ -17,25 +18,8 @@ def test_t5x():
     rng = jax.random.PRNGKey(0)
     params = model.init(rng, tokens, training=False)
     print(jax.tree_map(lambda x: x.shape, params))
-    eval_fn = jax.jit(model.apply)
 
-    def tokens_to_logits(decoding_state):
-        cur_index = decoding_state.cur_index
-        cur_token = decoding_state.cur_token
-        sequences = decoding_state.sequences
-        cache = decoding_state.cache
-        res = eval_fn(params, cur_token, past_key_values=cache, cache_pos=cur_index[0], use_cache=True)
-        # new_state = DecodingState()
-        return res[0][:, -1], [(x[0][:, 1:], x[1][:, 1:]) for x in res[1]]
-
-    # init_cache = [(jnp.zeros((1, 2, 20, 128)), jnp.zeros((1, 2, 20, 128))) for _ in range(32)]
-    def preprocess_tokens(tokens, pad_to: int = 10):
-        assert pad_to >= tokens.shape[1]
-        return jnp.concatenate(
-            (jnp.zeros((tokens.shape[0], 1)),
-             tokens,
-             jnp.zeros((tokens.shape[0], pad_to - tokens.shape[1]))
-             ), axis=1).astype(int)
+    tokens_to_logits = tokens_to_logits_fn_factory(params, model)
 
     n_heads, d_model, n_layers = cfg.model.n_heads, cfg.model.d_model, cfg.model.n_layers
     init_cache = [
