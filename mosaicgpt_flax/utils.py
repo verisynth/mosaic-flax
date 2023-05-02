@@ -1,7 +1,7 @@
 import flax
 import torch
 from t5x.decoding import temperature_sample
-
+import verisynth
 from mosaicgpt_flax import FlaxMosaicGPT
 
 import jax
@@ -174,3 +174,11 @@ def populate_inputs(rng, tokens, cache):
     tokens = jax.device_put_replicated(tokens, jax.devices())
     caches = [tuple([jax.device_put_replicated(x, jax.devices()) for x in xs]) for xs in cache]
     return rngs, tokens, caches
+
+
+@verisynth.completion()
+class Logger:
+    """
+    A thread-safe logger class.
+    It implements a context manager and flush all the logs to file at once upon exit.
+    """

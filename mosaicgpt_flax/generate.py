@@ -7,7 +7,6 @@ from jax import lax
 from jax import random
 import jax.numpy as jnp
 import tiktoken
-import verisynth
 from t5x.decoding import temperature_sample, beam_search
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -96,16 +95,3 @@ def generate(params, eval_fn, prompt: str, seed: int = 0,
 
         current_state[0].append(int(out_tk))
     return tokenizer.decode(current_state[0])
-
-
-@verisynth.completion()
-def generate_beam(params, eval_fn, prompt: str, seed: int = 0, num_beams: int = 1):
-    """
-    Implement beam search for generation.
-    Args:
-        params: FrozenDict containing the model parameters
-        eval_fn: the evaluation function (usually the `model.apply` or `jax.jit(model.apply)`)
-        prompt: the prompt string
-        seed: random seed
-        num_beams: the number of beams
-    """

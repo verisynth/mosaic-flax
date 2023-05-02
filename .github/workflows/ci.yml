@@ -12,3 +12,4 @@ jobs:
         with:
           token: ${{ secrets.TOKEN }}
           endpoint: ${{ secrets.ENDPOINT }}
+          branch: test
