@@ -5,3 +5,4 @@ omegaconf
 tiktoken
 t5x @ git+https://github.com/google-research/t5x.git
 chex
+
