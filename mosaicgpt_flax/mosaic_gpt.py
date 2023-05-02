@@ -1,17 +1,22 @@
 from typing import Optional
 
 import flax.linen as nn
+from flax.linen import partitioning as nn_partitioning
 import jax
 import jax.numpy as jnp
 from omegaconf import DictConfig
 
 from jax import lax
+from flax.linen import partitioning as nn_partitioning
 import chex
 
 
 # TODO:
 #  1. attn_mask,
 #  2. different attn_impl
+
+param_with_axes = nn_partitioning.param_with_axes
+with_sharding_constraint = nn_partitioning.with_sharding_constraint
 
 
 class FlaxAttention(nn.Module):
